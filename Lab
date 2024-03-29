@@ -1,0 +1,106 @@
+//Create new database named: FacultySystemV2.
+//Create student collection that has (FirstName, lastName, IsFired, FacultyID, array of objects, each object has CourseID, grade).
+//Create Faculty collection that has (Faculty Name, Address).
+//Create Course collection, which has (Course Name, Final Mark).
+//Insert some data in previous collections.
+
+
+db.createCollection("students", {
+    validator: {
+        $jsonSchema: {
+            bsonType: "object",
+            required: ["FirstName", "LastName", "IsFired", "FacultyID", "courses"],
+            properties: {
+                FirstName: { bsonType: "string", description: "must be a string and is required" },
+                LastName: { bsonType: "string", description: "must be a string and is required" },
+                IsFired: { bsonType: "bool", description: "must be a boolean and is required" },
+                FacultyID: { bsonType: "objectId", description: "must be an objectId and is required" },
+                courses: {
+                    bsonType: "array",
+                    description: "must be an array of objects and is required",
+                    items: {
+                        bsonType: "object",
+                        required: ["CourseID", "grade"],
+                        properties: {
+                            CourseID: { bsonType: "objectId", description: "must be an objectId and is required" },
+                            grade: { bsonType: "int", description: "must be an integer and is required" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+});
+
+// Insert dummy data into Student collection
+db.students.insertMany([
+    {
+        "FirstName": "John",
+        "LastName": "Doe",
+        "IsFired": false,
+        "FacultyID": ObjectId(), // Generate a new ObjectId for FacultyID
+        "courses": [
+            { "CourseID": ObjectId(), "grade": 85 },
+            { "CourseID": ObjectId(), "grade": 90 }
+        ]
+    },
+    {
+        "FirstName": "Jane",
+        "LastName": "Smith",
+        "IsFired": false,
+        "FacultyID": ObjectId(), // Generate a new ObjectId for FacultyID
+        "courses": [
+            { "CourseID": ObjectId(), "grade": 78 },
+            { "CourseID": ObjectId(), "grade": 92 }
+        ]
+    }
+]);
+
+// Display each student Full Name along with their average grade in all courses
+db.students.aggregate([
+    {
+        $project: {
+            FullName: { $concat: ["$FirstName", " ", "$LastName"] },
+            AverageGrade: { $avg: "$courses.grade" }
+        }
+    }
+]);
+
+// Using aggregation display the sum of final mark for all courses in Course collection.
+db.courses.aggregate([
+    {
+        $group: {
+            _id: null,
+            TotalFinalMark: { $sum: "$FinalMark" }
+        }
+    }
+]);
+
+//Implement (one to many) relation between Student and Course, by adding array of Courses IDs in the student object.
+db.students.findOne({ FirstName: 'Jane' }, { _id: 0, courses: 1 }).courses.forEach(courseId => {
+    const course = db.courses.findOne({ _id: courseId });
+    printjson(course);
+});
+
+
+// Lookup the Faculty name for a specific student (e.g., Jane Smith)
+db.students.aggregate([
+    {
+        $match: { FirstName: "Jane", LastName: "Smith" }
+    },
+    {
+        $lookup: {
+            from: "faculties",
+            localField: "FacultyID",
+            foreignField: "_id",
+            as: "faculty"
+        }
+    },
+    {
+        $project: {
+            _id: 0,
+            FullName: { $concat: ["$FirstName", " ", "$LastName"] },
+            Faculty: { $arrayElemAt: ["$faculty.FacultyName", 0] }
+        }
+    }
+]);
